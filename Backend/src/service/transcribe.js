@@ -1,63 +1,109 @@
 import 'dotenv/config'
-import { AssemblyAI } from './assemblyai'
-import { WebSocketServer } from 'ws';
 import { DeepgramClient } from '@deepgram/sdk'
+import { WebSocket, WebSocketServer } from 'ws'
 
-const wss = new WebSocketServer({ port: 8080 });
-const deepgram = new DeepgramClient();
+const deepgram = new DeepgramClient({ apiKey: process.env.DEEPGRAM_API_KEY })
 
-wss.on("connection", async (clientWs) => {
-    console.log(`Client connected`);
+export function attachTranscriptionWebSocket(server) {
+  const wss = new WebSocketServer({ server })
 
-    // 1. Open live WebSocket connection to Deepgram
-    const dgConnection = await deepgram.listen.v1.connect({
+  wss.on('connection', async (clientWs) => {
+    console.log('Transcription client connected')
+
+    let dgConnection
+    let keepAliveInterval
+
+    try {
+      dgConnection = await deepgram.listen.v1.connect({
         model: 'nova-3',
-        language: "hi",
-        smart_format: "true",     
-        interim_results: "true",  
-        endpointing: "300", 
-    })
+        language: 'hi',
+        encoding: 'linear16',
+        sample_rate: 16000,
+        smart_format: 'true',
+        interim_results: 'true',
+        endpointing: '300',
+      })
 
-    // 2. Listen for Deepgram connection open
-    dgConnection.on("open", () => {
-        console.log("Connected to Deepgram Websocket");
-    })
+      dgConnection.on('message', (data) => {
+        if (data.type === 'Error') {
+          console.error('Deepgram response error:', data)
+          if (clientWs.readyState === WebSocket.OPEN) clientWs.close(1011, 'Deepgram rejected the audio stream')
+          return
+        }
+        if (data.type !== 'Results' || clientWs.readyState !== WebSocket.OPEN) return
 
-    // 3. Receive live transcript from Deepgram & Forward to client
-    dgConnection.on("message", (data) => {
-        if (data.type === "Results") {
-        const transcript = data.channel?.alternatives?.[0]?.transcript;
+        const transcript = data.channel?.alternatives?.[0]?.transcript
+
         if (transcript) {
-            clientWs.send(
-            JSON.stringify({
-                text: transcript,
-                isFinal: data.is_final, // true = finalized sentence, false = partial live guess
-            })
-            );
+          console.log(data.is_final ? `[FINAL] ${transcript}` : `[LIVE] ${transcript}`)
+          clientWs.send(JSON.stringify({ text: transcript, isFinal: data.is_final }))
         }
+      })
+
+      dgConnection.on('error', (error) => {
+        console.error('Deepgram error:', error)
+        if (clientWs.readyState === WebSocket.OPEN) clientWs.close(1011, 'Transcription service error')
+      })
+
+      dgConnection.on('close', (event) => {
+        console.warn('Deepgram WebSocket closed:', event?.code ?? 'unknown', event?.reason ?? '')
+        if (clientWs.readyState === WebSocket.OPEN) {
+          clientWs.close(1011, 'Transcription service disconnected')
         }
-    });
+      })
 
-    // 4. Keep the connection alive during silent pauses
-    const keepAliveInterval = setInterval(() => {
-        dgConnection.sendKeepAlive();
-    }, 8000);
+      dgConnection.connect()
+      await dgConnection.waitForOpen()
 
-    // 5. Connect & wait until Deepgram socket is ready
-    dgConnection.connect();
-    await dgConnection.waitForOpen();
+      if (clientWs.readyState !== WebSocket.OPEN) {
+        dgConnection.close()
+        return
+      }
 
-    // 6. Forward raw binary audio chunks from client directly to Deepgram
-    clientWs.on("message", (audioChunk) => {
-        dgConnection.sendMedia(audioChunk);
-    });
+      console.log('Connected to Deepgram WebSocket')
+      keepAliveInterval = setInterval(() => {
+        if (dgConnection.readyState !== WebSocket.OPEN) return
+        try {
+          dgConnection.sendKeepAlive({ type: 'KeepAlive' })
+        } catch (error) {
+          console.warn('Could not send Deepgram keepalive:', error.message)
+        }
+      }, 8000)
 
-    // 7. Clean up on disconnect
-    clientWs.on("close", () => {
-        console.log("Client disconnected");
-        clearInterval(keepAliveInterval);
-        dgConnection.close();
-    });
+      let audioChunkCount = 0
+      clientWs.on('message', (audioChunk, isBinary) => {
+        if (!isBinary) {
+          console.warn('Ignoring a non-binary message from the transcription client')
+          return
+        }
+        if (dgConnection.readyState !== WebSocket.OPEN) {
+          console.warn('Dropping audio chunk because Deepgram is not open')
+          return
+        }
+        try {
+          dgConnection.sendMedia(audioChunk)
+          audioChunkCount += 1
+          if (audioChunkCount === 1) {
+            console.log(`First PCM audio chunk sent to Deepgram (${audioChunk.byteLength} bytes)`)
+          }
+        } catch (error) {
+          // The connection can close between checking readyState and sending.
+          console.warn('Could not forward audio to Deepgram:', error.message)
+        }
+      })
 
-    dgConnection.on("error", (err) => console.error("Deepgram Error:", err));
-})
+      clientWs.on('close', () => {
+        console.log('Transcription client disconnected')
+        clearInterval(keepAliveInterval)
+        dgConnection.close()
+      })
+    } catch (error) {
+      console.error('Could not start Deepgram transcription:', error)
+      clearInterval(keepAliveInterval)
+      dgConnection?.close()
+      if (clientWs.readyState === WebSocket.OPEN) clientWs.close(1011, 'Could not start transcription')
+    }
+  })
+
+  return wss
+}
