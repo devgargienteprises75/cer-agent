@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import multer from 'multer';
 import path from 'path'
-import { uploadAudioController } from '../controllers/audio.controller.js';
+import { uploadDataController } from '../controllers/audio.controller.js';
 
 const router = Router()
 
@@ -14,6 +14,6 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage })
 
-router.post("/upload-audio", upload.single('audio'), uploadAudioController)
+router.post("/upload-data", uploadDataController)
 
 export default router;

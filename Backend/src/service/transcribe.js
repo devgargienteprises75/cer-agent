@@ -35,7 +35,7 @@ export function attachTranscriptionWebSocket(server) {
         const transcript = data.channel?.alternatives?.[0]?.transcript
 
         if (transcript) {
-          console.log(data.is_final ? `[FINAL] ${transcript}` : `[LIVE] ${transcript}`)
+          console.log(`[FINAL] ${transcript}`)
           clientWs.send(JSON.stringify({ text: transcript, isFinal: data.is_final }))
         }
       })

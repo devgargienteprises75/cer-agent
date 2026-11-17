@@ -1,16 +1,31 @@
-# React + Vite
+# Vox frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + Vite frontend for the live Hindi transcription service.
 
-Currently, two official plugins are available:
+## Source layout
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```text
+src/
+├── app/                 # Composition root; wires infrastructure into the UI
+├── presentation/        # React pages, reusable view components, assets, and styles
+├── application/         # Recording and transcription workflow
+├── domain/              # Framework-independent transcript operations
+└── infrastructure/      # Browser audio capture and WebSocket adapter
+```
 
-## React Compiler
+The four application layers are `presentation`, `application`, `domain`, and `infrastructure`. `app/App.jsx` is the composition root: it creates the browser adapters and injects them into the presentation page. Application code depends on those adapters through injected functions, so it does not import browser or network implementations directly.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## WebSocket configuration
 
-## Expanding the ESLint configuration
+By default, the frontend connects to `ws://<current-host>:8000` (or `wss://` when served over HTTPS). To use another endpoint, set `VITE_TRANSCRIBE_WS_URL` in a frontend `.env` file, for example:
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```env
+VITE_TRANSCRIBE_WS_URL=ws://localhost:8000
+```
+
+## Run locally
+
+```sh
+npm install
+npm run dev
+```
