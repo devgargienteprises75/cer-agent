@@ -1,3 +1,4 @@
+import cerModel from "../models/cer.model.js";
 import decideCat from "../service/ai.service.js";
 
 export async function uploadDataController(req, res) {
@@ -12,5 +13,20 @@ export async function uploadDataController(req, res) {
     } = req.body;
 
     const category = await decideCat({ description })
-    console.log(category.content)
+
+    const data = await cerModel.create({
+        floor, 
+        isNewProduct, 
+        productCode,
+        productName,
+        salesPersonName,
+        exitCategory: category.content,
+        description,
+        imageUrl
+    })
+
+    res.status(200).json({
+        message: "Data save successfully",
+        data
+    })
 }

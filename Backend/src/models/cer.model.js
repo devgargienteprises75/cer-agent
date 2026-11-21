@@ -2,11 +2,11 @@ import mongoose from 'mongoose'
 
 const cerSchema = new mongoose.Schema({
     date: {
-        type: date,
+        type: String,
         default: Date.now()
     },
     floor: {
-        type: [Number],
+        type: Number,
         required: true,
         enum: [-1, 0, 1, 2, 3]
     },
@@ -26,7 +26,7 @@ const cerSchema = new mongoose.Schema({
     },
     exitCategory: {
         type: String,
-        required: true
+        // required: true
     },
     description: {
         type: String,
