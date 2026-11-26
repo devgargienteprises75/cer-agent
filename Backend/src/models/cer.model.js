@@ -34,6 +34,9 @@ const cerSchema = new mongoose.Schema({
     },
     imageUrl: {
         type: String
+    },
+    imageDriveFileId: {
+        type: String
     }
 })
 

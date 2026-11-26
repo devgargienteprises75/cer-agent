@@ -1,19 +1,24 @@
 import { Router } from 'express'
 import multer from 'multer';
-import path from 'path'
 import { uploadDataController } from '../controllers/audio.controller.js';
 
 const router = Router()
 
-const storage = multer.diskStorage({
-    destination: "uploads/",
-    filename: (req, file, cb) => {
-        cb(null, `voice-${Date.now()}${path.extname(file.originalname)}`)
+const allowedImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+    fileFilter: (req, file, callback) => {
+        if (!allowedImageTypes.has(file.mimetype)) {
+            const error = new Error('Upload a JPEG, PNG, WebP, or GIF image')
+            error.status = 400
+            return callback(error)
+        }
+
+        callback(null, true)
     }
 })
 
-const upload = multer({ storage })
-
-router.post("/upload-data", uploadDataController)
+router.post("/upload-data", upload.single('image'), uploadDataController)
 
 export default router;
